@@ -23,5 +23,8 @@ namespace portfolioBackend.Models
 
         [BsonElement("github")]
         public string GitHub { get; set; } = string.Empty;
+
+        [BsonElement("twitter")]
+        public string Twitter { get; set; } = string.Empty;
     }
 }

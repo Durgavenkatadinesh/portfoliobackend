@@ -5,7 +5,7 @@ namespace portfolioBackend.Controllers
 {
     [ApiController]
     [Route("api/auth")]
-    public class AuthController:ControllerBase
+    public class AuthController : ControllerBase
     {
         private readonly AuthService _authService;
         private readonly TokenService _tokenService;
@@ -17,32 +17,43 @@ namespace portfolioBackend.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(RegisterRequest req)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest req)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var existing = await _authService.GetByEmailAsync(req.Email);
             if (existing != null)
                 return BadRequest("User already exists");
 
             await _authService.RegisterAsync(req.Email, req.Password);
-            return Ok("Registered");
+            return Ok("Registered successfully");
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest req)
+        public async Task<IActionResult> Login([FromBody] LoginRequest req)
         {
-            var user = await _authService.GetByEmailAsync(req.Email);
-            if(user==null)
-                return Unauthorized("Invalid Credentials");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            if(!_authService.VerifyPassword(req.Password,user.PasswordHash))
-                return Unauthorized("Invalid Credentials");
+            var user = await _authService.GetByEmailAsync(req.Email);
+            if (user == null)
+                return Unauthorized("Invalid credentials");
+
+            if (!_authService.VerifyPassword(req.Password, user.PasswordHash))
+                return Unauthorized("Invalid credentials");
 
             var token = _tokenService.GenerateToken(user.Id!, user.Email);
 
-            return Ok(new { token });
+            return Ok(new
+            {
+                token = token,
+                userId = user.Id,
+                email = user.Email
+            });
         }
-
     }
+
     public record RegisterRequest(string Email, string Password);
     public record LoginRequest(string Email, string Password);
 }
