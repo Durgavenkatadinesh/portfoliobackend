@@ -7,25 +7,72 @@ namespace portfolioBackend.Services
     public class AuthService
     {
         private readonly IMongoCollection<User> _users;
+
         public AuthService(IMongoDatabase database)
         {
             _users = database.GetCollection<User>("Users");
         }
-        public async Task<User?> GetByEmailAsync(string email) =>
-            await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
 
-        public async Task RegisterAsync(string email, string password)
+        // ---------- HELPERS ----------
+        public async Task<User?> GetByIdentifierAsync(string identifier)
         {
+            return await _users.Find(
+                u => u.Email == identifier || u.Username == identifier
+            ).FirstOrDefaultAsync();
+        }
+
+        public async Task<bool> UsernameExistsAsync(string username)
+        {
+            return await _users.Find(u => u.Username == username).AnyAsync();
+        }
+
+        public async Task<bool> EmailExistsAsync(string email)
+        {
+            return await _users.Find(u => u.Email == email).AnyAsync();
+        }
+
+        // ---------- REGISTER ----------
+        public async Task<User> RegisterAsync(
+            string username,
+            string email,
+            string password,
+            string? phoneNumber
+        )
+        {
+            if (await UsernameExistsAsync(username))
+                throw new Exception("Username already exists");
+
+            if (await EmailExistsAsync(email))
+                throw new Exception("Email already exists");
+
             var hash = BCrypt.Net.BCrypt.HashPassword(password);
+
             var user = new User
             {
-                Email = email,
-                PasswordHash = hash
+                Username = username.ToLower(),
+                Email = email.ToLower(),
+                PasswordHash = hash,
+                PhoneNumber = phoneNumber,
+                IsSubscribed = false,
+                CreatedAt = DateTime.UtcNow
             };
-            await _users.InsertOneAsync(user);
 
+            await _users.InsertOneAsync(user);
+            return user;
         }
-        public bool VerifyPassword(string password, string hash) =>
-            BCrypt.Net.BCrypt.Verify(password, hash);
+
+        // ---------- LOGIN ----------
+        public async Task<User?> LoginAsync(string identifier, string password)
+        {
+            var user = await GetByIdentifierAsync(identifier);
+            if (user == null)
+                return null;
+
+            var valid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+            if (!valid)
+                return null;
+
+            return user;
+        }
     }
 }

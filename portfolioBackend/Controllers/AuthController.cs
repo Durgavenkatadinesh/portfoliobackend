@@ -16,44 +16,79 @@ namespace portfolioBackend.Controllers
             _tokenService = tokenService;
         }
 
+        // ---------- REGISTER ----------
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest req)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (string.IsNullOrWhiteSpace(request.Username) ||
+                string.IsNullOrWhiteSpace(request.Email) ||
+                string.IsNullOrWhiteSpace(request.Password))
+            {
+                return BadRequest("All fields are required");
+            }
 
-            var existing = await _authService.GetByEmailAsync(req.Email);
-            if (existing != null)
-                return BadRequest("User already exists");
+            try
+            {
+                var user = await _authService.RegisterAsync(
+                    request.Username,
+                    request.Email,
+                    request.Password,
+                    request.PhoneNumber
+                );
 
-            await _authService.RegisterAsync(req.Email, req.Password);
-            return Ok("Registered successfully");
+                var token = _tokenService.GenerateToken(user.Id, user.Email);
+
+                return Ok(new
+                {
+                    message = "Registration succes",
+                    userId = user.Id,
+                    username = user.Username,
+                    token
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
+        // ---------- LOGIN ----------
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest req)
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var user = await _authService.LoginAsync(
+                request.Identifier,
+                request.Password
+            );
 
-            var user = await _authService.GetByEmailAsync(req.Email);
             if (user == null)
-                return Unauthorized("Invalid credentials");
-
-            if (!_authService.VerifyPassword(req.Password, user.PasswordHash))
-                return Unauthorized("Invalid credentials");
-
-            var token = _tokenService.GenerateToken(user.Id!, user.Email);
+                return Unauthorized("Invalid username/email or password");
+            var token = _tokenService.GenerateToken(user.Id, user.Email);
 
             return Ok(new
             {
-                token = token,
+                message = "Login successful",
                 userId = user.Id,
-                email = user.Email
+                username = user.Username,
+                isSubscribed = user.IsSubscribed,
+                token
+
             });
         }
     }
 
-    public record RegisterRequest(string Email, string Password);
-    public record LoginRequest(string Email, string Password);
+    // ---------- DTOs ----------
+    public class RegisterRequest
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string? PhoneNumber { get; set; }
+    }
+
+    public class LoginRequest
+    {
+        public string Identifier { get; set; } = string.Empty; // username OR email
+        public string Password { get; set; } = string.Empty;
+    }
 }
